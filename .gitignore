@@ -1,0 +1,32 @@
+﻿# Visual Studio build & temp files
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+*.db
+*.opendb
+*.user
+*.suo
+*.sln.docstates
+
+# Build artifacts & logs
+*.log
+*.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+*.recipe
+*.tmp
+*.obj
+*.iobj
+*.ipdb
+*.pdb
+*.ilk
+*.i
+*.res
+
+# System/IDE scratch
+.agent/
+scratch/
+nul

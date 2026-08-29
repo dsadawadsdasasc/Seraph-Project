@@ -1,0 +1,30 @@
+// dma_res.rc  --  DMA build resource file.
+//
+// vmm.dll and leechcore.dll are embedded as RCDATA resources.
+// The paths below are RELATIVE to where rc.exe is invoked (b_dma.bat
+// sets the working directory to Seraph/).
+//
+// b_dma.bat embeds the actual DLL files placed in the DMA\ folder
+// before running the build.
+//
+// Resource IDs: 401 = vmm.dll, 402 = leechcore.dll
+// (defined in DMA/Resource.h)
+
+#include <windows.h>
+#include "Resource.h"
+
+401 RCDATA "DMA\\vmm.dll"
+402 RCDATA "DMA\\leechcore.dll"
+403 RCDATA "DMA\\FTD3XX.dll"
+
+IDD_LOGIN_DIALOG DIALOGEX 0, 0, 240, 95
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_CENTER
+CAPTION "Seraph DMA - Login"
+FONT 9, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Digite sua chave de licenca:", -1, 14, 14, 212, 8
+    EDITTEXT        IDC_KEY_EDIT, 14, 28, 212, 14, ES_AUTOHSCROLL
+    LTEXT           "", IDC_STATUS_TEXT, 14, 48, 212, 12
+    DEFPUSHBUTTON   "Login", IDOK, 120, 68, 50, 16
+    PUSHBUTTON      "Cancelar", IDCANCEL, 176, 68, 50, 16
+END

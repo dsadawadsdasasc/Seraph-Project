@@ -1,0 +1,22 @@
+[package]
+name = "jarvis-scan"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argh = "0.1.13"
+memflow = "0.2.3"
+mimalloc = "0.1.48"
+pbr = "1.1.1"
+rayon = "1.11.0"
+rayon-tlsctx = "0.2.0"
+scanflow = "0.2.1"
+serde = "1.0.219"
+serde_json = "1.0.142"
+strum = "0.27.2"
+strum_macros = "0.27.2"
+
+[target.'cfg(windows)'.dependencies]
+memflow-vdm = { git = "https://github.com/a2x/memflow-vdm", version = "0.1.0" }
+memflow-winio = { git = "https://github.com/a2x/memflow-winio", version = "0.1.0" }
+memflow-win32 = "0.2.0"

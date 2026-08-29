@@ -1,0 +1,532 @@
+// "g_local_player", "48 89 5C 24 20 56 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 89 6C 24 30 8B F1 0F B7 E9", Lea at byte 10
+
+constexpr uint32_t INDEX_ARRAY_OFFSET = 288;
+
+uint64_t ror64(uint64_t v, int n) { n &= 63; return (v >> n) | (v << (64 - n)); }
+uint64_t rol64(uint64_t v, int n) { n &= 63; return (v << n) | (v >> (64 - n)); }
+
+struct EncryptionKeys { uint32_t key1, key2, key3, key4; };
+
+// key1: A = 0x6C25F52, B = 0x71B6529
+// key2: A = 0x904559A, B = 0x152F7E4
+// key3: A = 0x6D63C00, B = 0x667CF07
+// key4: A = 0x92D67B1, B = 0x76807F2
+
+void init_keys(uint64_t base, EncryptionKeys& keys)
+{
+    auto r = [&](uint64_t rva) { return mem.Read<uint32_t>(base + rva); };
+    keys.key1 = r(KEY1_ADDR1) ^ r(KEY1_ADDR2);
+    keys.key2 = r(KEY2_ADDR1) ^ r(KEY2_ADDR2);
+    keys.key3 = r(KEY3_ADDR1) ^ r(KEY3_ADDR2);
+    keys.key4 = r(KEY4_ADDR1) ^ r(KEY4_ADDR2);
+}
+
+uint64_t decrypt_pointer(uint64_t encrypted, const EncryptionKeys& keys)
+{
+    if (encrypted == 0) return 0;
+
+    uint32_t lo = (uint32_t)encrypted ^ keys.key1;
+    uint32_t hi = (uint32_t)(encrypted >> 32) ^ keys.key2;
+    uint64_t b = ((uint64_t)hi << 32) | lo;
+    if (b == 0) return 0;
+
+    uint64_t k3 = (uint64_t)keys.key3;
+    if (keys.key3 & 0x80000000) k3 |= 0xFFFFFFFF00000000ULL;
+
+    uint64_t ctrl = ror64(k3, 12) & 0xF;
+    uint32_t state = 0x6AE7FBEB;
+    uint32_t xval = 0x7F9BAF67;
+
+    for (int i = 0; i < 200; i++)
+    {
+        switch (state)
+        {
+        case 0x0B9A39A3: ctrl ^= 0x520499F;  xval = 0x054B9DB1; b = ror64(b, 32); break;
+        case 0x0A3C3784: xval = 0x84E1AC57; b = ror64(b, 32); b ^= ctrl; break;
+        case 0x05A68EAC: ctrl ^= 0x7599584;  xval = 0xEDD1CC2E; break;
+        case 0x135F573A: ctrl ^= 0xAD81FFF8; xval = 0x74C63B11; b = rol64(b, 32); break;
+        case 0x13B761C1: ctrl ^= 0x3857867F; xval = 0x5DB03CF2; break;
+        case 0x183F26EF: b ^= ctrl; xval = 0xF778C6AA; break;
+        case 0x31150C70:
+        {
+            uint64_t t = b;
+            b ^= 0x5C7AB0E6;
+            uint32_t a2 = (uint32_t)(b & 0xFFFFFFFF);
+            t = rol64(t, 32);
+            b = t ^ a2;
+            xval = 0x96D92C83;
+            ctrl = b & 0xFFFFFFFF;
+            break;
+        }
+        case 0x365D069A: b ^= ctrl; xval = 0x07480AEA; break;
+        case 0x434C8E58: b ^= ctrl; xval = 0x04543712; break;
+        case 0x4718B94A: return rol64(b, 32);
+        case 0x4830035B: b = rol64(b, 32); xval = 0xB9327B31; break;
+        case 0x49BF5619: ctrl ^= 0x479EF5;  xval = 0x42143ACF; b = ror64(b, 32); break;
+        case 0x4B97D752: xval = 0x864FAA54; ctrl = b & 0xFFFFFFFF; break;
+        case 0x4E075D33: b = ror64(b, 32); xval = 0x0D4BD36B; break;
+        case 0x69EF8DA9: b = rol64(b, 32); xval = 0x5FB28B33; break;
+        case 0x6AE7FBEB: xval = 0x876311EE; ctrl = b & 0xFFFFFFFF; break;
+        case 0x741BBB9C: ctrl = ((uint32_t)(b & 0xFFFFFFFF) ^ 0x669F174B) & 0xFFFFFFFF; xval = 0xFF3DE5D5; break;
+        case 0x893325A5: b ^= ctrl; xval = 0x3FCB7CFF; ctrl = b & 0xFFFFFFFF; break;
+        case 0x8EDD9BD3: ctrl = ((uint32_t)(b & 0xFFFFFFFF) ^ 0x97DFB4A) & 0xFFFFFFFF; xval = 0xC6ED9888; break;
+        case 0x95A17A74: b = rol64(b, 32); xval = 0x8D9E5C9B; break;
+        case 0xA7CC20F3: ctrl ^= 0xBB569BC;  xval = 0xADF01777; break;
+        case 0xA9385526: ctrl = ((uint32_t)(b & 0xFFFFFFFF) ^ 0x3FE0348F) & 0xFFFFFFFF; xval = 0x0B665F15; break;
+        case 0xB457BF21: b ^= ctrl; xval = 0xFFC06873; break;
+        case 0xB6F8595A: ctrl ^= 0x46EE364;  xval = 0x02AFE67B; b = rol64(b, 32); break;
+        case 0xB8E1B51D: ctrl = ((uint32_t)(b & 0xFFFFFFFF) ^ 0x8A7CC1D2) & 0xFFFFFFFF; xval = 0x74583260; b = ror64(b, 32); break;
+        case 0xCDD87D06: ctrl ^= 0x772FD793; xval = 0xA437F0AF; break;
+        case 0xD1C42575: ctrl = ((uint32_t)(b & 0xFFFFFFFF) ^ 0x696AAB0) & 0xFFFFFFFF; xval = 0xBBD4BEEB; b = rol64(b, 32); break;
+        case 0xE8774282: b = rol64(b, 32); xval = 0x61446727; break;
+        case 0xED84EA05: ctrl ^= 0x86D5EE4;  xval = 0x78259071; break;
+        case 0xEF47E045: xval = 0xEAE16EE9; ctrl = b & 0xFFFFFFFF; break;
+        case 0xF102786A: b ^= ctrl; xval = 0xE2B519AB; ctrl = b & 0xFFFFFFFF; break;
+        case 0xF9107A98: ctrl ^= 0x4AE7CAA;  xval = 0xE7373BD4; b = rol64(b, 32); break;
+        default: return 0;
+        }
+        state ^= xval;
+        if (state == 0x5662D5B7) break;
+    }
+    return b;
+}
+
+int32_t get_local_player_index(uint64_t base, uint64_t g_local_player_rva, const EncryptionKeys& keys)
+{
+    uint64_t enc = mem.Read<uint64_t>(base + g_local_player_rva);
+    if (enc == 0) return -1;
+
+    uint64_t dec = decrypt_pointer(enc, keys);
+    if (dec == 0) return -1;
+
+    int32_t tag = mem.Read<int32_t>(dec + INDEX_ARRAY_OFFSET);
+    if (tag == -1) return -1;
+    return tag & 0x1FFF;
+}
+namespace opk
+    {
+        constexpr uint32_t BODY_VTABLE = 0x00;
+        constexpr uint32_t BODY_USER_DATA = 0x14;
+        constexpr uint32_t BODY_WORLD_PTR = 0x18;
+        constexpr uint32_t BODY_COLLISION_FILTER = 0xA0;
+        constexpr uint32_t BODY_ENTITY_DATA = 0x150;
+        constexpr uint32_t BODY_MOTION_TYPE = 0x168;
+        constexpr uint32_t BODY_POS_X = 0x1C0;
+        constexpr uint32_t BODY_POS_Y = 0x1C4;
+        constexpr uint32_t BODY_POS_Z = 0x1C8;
+        constexpr uint32_t BODY_POS_W = 0x1CC;
+        constexpr uint32_t BODY_TRANSFORM_POS = 0x1A0;
+        constexpr uint32_t BODY_CENTER_OF_MASS0 = 0x1B0;
+        constexpr uint32_t BODY_LINEAR_VEL = 0x230;
+        constexpr uint32_t BODY_ANGULAR_VEL = 0x240;
+
+        constexpr uint8_t MOTION_DYNAMIC = 1;
+        constexpr uint8_t MOTION_SPHERE_INERTIA = 2;
+        constexpr uint8_t MOTION_BOX_INERTIA = 3;
+        constexpr uint8_t MOTION_KEYFRAMED = 4;
+        constexpr uint8_t MOTION_FIXED = 5;
+        constexpr uint8_t MOTION_THIN_BOX_INERTIA = 6;
+        constexpr uint8_t MOTION_CHARACTER = 7;
+
+        constexpr uint32_t WORLD_ACTIVE_ISLANDS = 0x40;
+        constexpr uint32_t WORLD_ACTIVE_COUNT = 0x48;
+        constexpr uint32_t WORLD_INACTIVE_ISLANDS = 0x50;
+        constexpr uint32_t WORLD_INACTIVE_COUNT = 0x58;
+        constexpr uint32_t ISLAND_ENTITY_ARRAY = 0x68;
+        constexpr uint32_t ISLAND_ENTITY_COUNT = 0x70;
+    }
+bool EntitySystem::validate_hkp_world()
+    {
+        uint64_t world = mem.Read<uint64_t>(m_base + offsets::opk::HKPWORLD_PTR);
+
+        if (world == 0 || world < 0x10000) return false;
+
+        uint64_t vtable = mem.Read<uint64_t>(world);
+        if (vtable < m_base || vtable > m_base + 0x3000000) return false;
+
+        m_hkp_world = world;
+        m_hkp_world_valid = true;
+        return true;
+    }
+
+    uint64_t EntitySystem::get_hkp_world()
+    {
+        static uint32_t hkp_revalidate_ctr = 0;
+        if (m_hkp_world_valid && m_hkp_world != 0 && ++hkp_revalidate_ctr < 200) return m_hkp_world;
+        hkp_revalidate_ctr = 0;
+        if (!validate_hkp_world()) return 0;
+        return m_hkp_world;
+    }
+
+    static int collect_island_ptrs(uint64_t world, uint64_t* island_ptrs, int max_islands)
+    {
+        uint64_t active_arr = 0, inactive_arr = 0;
+        int32_t active_cnt = 0, inactive_cnt = 0;
+        {
+            ScopedScatter h(mem);
+            if (!h) return 0;
+            mem.AddScatterReadRequest(h, world + offsets::opk::WORLD_ACTIVE_ISLANDS, &active_arr, 8);
+            mem.AddScatterReadRequest(h, world + offsets::opk::WORLD_ACTIVE_COUNT, &active_cnt, 4);
+            mem.AddScatterReadRequest(h, world + offsets::opk::WORLD_INACTIVE_ISLANDS, &inactive_arr, 8);
+            mem.AddScatterReadRequest(h, world + offsets::opk::WORLD_INACTIVE_COUNT, &inactive_cnt, 4);
+            mem.ExecuteReadScatter(h);
+        }
+
+        if (active_cnt < 0 || active_cnt > 200) active_cnt = 0;
+        if (inactive_cnt < 0 || inactive_cnt > 200) inactive_cnt = 0;
+        if (active_cnt + inactive_cnt == 0) return 0;
+
+        ScopedScatter h(mem);
+        if (!h) return 0;
+        int n_active = 0, n_inactive = 0;
+        if (is_user_heap_ptr(active_arr) && active_cnt > 0)
+        {
+            n_active = (active_cnt > max_islands) ? max_islands : active_cnt;
+            mem.AddScatterReadRequest(h, active_arr, island_ptrs, n_active * 8);
+        }
+        if (is_user_heap_ptr(inactive_arr) && inactive_cnt > 0 && n_active < max_islands)
+        {
+            n_inactive = inactive_cnt;
+            if (n_active + n_inactive > max_islands) n_inactive = max_islands - n_active;
+            if (n_inactive > 0) mem.AddScatterReadRequest(h, inactive_arr, &island_ptrs[n_active], n_inactive * 8);
+        }
+        mem.ExecuteReadScatter(h);
+        return n_active + n_inactive;
+    }
+
+    static int collect_body_ptrs(const uint64_t* island_ptrs, int n_islands, uint64_t* body_ptrs, int max_ptrs)
+    {
+        if (n_islands > 128) n_islands = 128;
+        struct IslandData
+        {
+            uint64_t ent_array;
+            int32_t ent_count;
+        };
+        IslandData island_data[128];
+        memset(island_data, 0, sizeof(island_data));
+        {
+            ScopedScatter h(mem);
+            if (!h) return 0;
+            for (int i = 0; i < n_islands; i++)
+            {
+                if (!is_user_heap_ptr(island_ptrs[i])) continue;
+                mem.AddScatterReadRequest(h, island_ptrs[i] + offsets::opk::ISLAND_ENTITY_ARRAY, &island_data[i].ent_array, 8);
+                mem.AddScatterReadRequest(h, island_ptrs[i] + offsets::opk::ISLAND_ENTITY_COUNT, &island_data[i].ent_count, 4);
+            }
+            mem.ExecuteReadScatter(h);
+        }
+
+        int n_ptrs = 0;
+        ScopedScatter h(mem);
+        if (!h) return 0;
+        for (int i = 0; i < n_islands && n_ptrs < max_ptrs; i++)
+        {
+            auto& id = island_data[i];
+            if (!is_user_heap_ptr(id.ent_array)) continue;
+            if (id.ent_count <= 0 || id.ent_count > 256) continue;
+            int n = id.ent_count;
+            if (n_ptrs + n > max_ptrs) n = max_ptrs - n_ptrs;
+            mem.AddScatterReadRequest(h, id.ent_array, &body_ptrs[n_ptrs], n * 8);
+            n_ptrs += n;
+        }
+        mem.ExecuteReadScatter(h);
+        return n_ptrs;
+    }
+int EntitySystem::enumerate_rigid_bodies(RigidBodyInfo* out, int max_bodies)
+    {
+        uint64_t world = get_hkp_world();
+        if (world == 0) return 0;
+
+        constexpr int MAX_ISLANDS = 128;
+        uint64_t island_ptrs[MAX_ISLANDS];
+        memset(island_ptrs, 0, sizeof(island_ptrs));
+        int n_islands = collect_island_ptrs(world, island_ptrs, MAX_ISLANDS);
+        if (n_islands == 0) return 0;
+
+        constexpr int MAX_PTRS = 512;
+        uint64_t body_ptrs[MAX_PTRS];
+        memset(body_ptrs, 0, sizeof(body_ptrs));
+        int n_ptrs = collect_body_ptrs(island_ptrs, n_islands, body_ptrs, MAX_PTRS);
+        if (n_ptrs == 0) return 0;
+
+        struct BodyRead
+        {
+            float pos[3];
+            uint8_t mtype;
+            uint32_t udata;
+            uint64_t entity_data;
+            uint64_t world_ptr;
+        };
+        int cap = (n_ptrs < max_bodies) ? n_ptrs : max_bodies;
+        if (cap > 512) cap = 512;
+
+        int valid_idx[512];
+        int valid_count = 0;
+        for (int i = 0; i < n_ptrs && valid_count < cap; i++)
+        {
+            if (is_user_heap_ptr(body_ptrs[i])) valid_idx[valid_count++] = i;
+        }
+        if (valid_count == 0) return 0;
+
+        BodyRead reads[512];
+        memset(reads, 0, sizeof(reads));
+        {
+            ScopedScatter h(mem);
+            if (!h) return 0;
+            for (int i = 0; i < valid_count; i++)
+            {
+                uint64_t body = body_ptrs[valid_idx[i]];
+                mem.AddScatterReadRequest(h, body + offsets::opk::BODY_POS_X, reads[i].pos, 12);
+                mem.AddScatterReadRequest(h, body + offsets::opk::BODY_MOTION_TYPE, &reads[i].mtype, 1);
+                mem.AddScatterReadRequest(h, body + offsets::opk::BODY_USER_DATA, &reads[i].udata, 4);
+                mem.AddScatterReadRequest(h, body + offsets::opk::BODY_ENTITY_DATA, &reads[i].entity_data, 8);
+                mem.AddScatterReadRequest(h, body + offsets::opk::BODY_WORLD_PTR, &reads[i].world_ptr, 8);
+            }
+            mem.ExecuteReadScatter(h);
+        }
+
+        uint64_t char_motion_vt = m_base + offsets::opk::CHARACTER_MOTION_VT;
+        uint64_t keyf_motion_vt = m_base + offsets::opk::KEYFRAMED_MOTION_VT;
+        int result = 0;
+        for (int i = 0; i < valid_count && result < max_bodies; i++)
+        {
+            auto& r = reads[i];
+            if (r.mtype == offsets::opk::MOTION_FIXED) continue;
+            if (r.entity_data != char_motion_vt && r.entity_data != keyf_motion_vt) continue;
+            if (!is_user_heap_ptr(r.world_ptr)) continue;
+            if (r.pos[0] == 0.0f && r.pos[1] == 0.0f && r.pos[2] == 0.0f) continue;
+            if (!is_sane_world_pos(r.pos[0], r.pos[1], r.pos[2])) continue;
+
+            out[result].address = body_ptrs[valid_idx[i]];
+            out[result].pos_x = r.pos[0];
+            out[result].pos_y = r.pos[1];
+            out[result].pos_z = r.pos[2];
+            out[result].motion_type = r.mtype;
+            out[result].user_data = r.udata;
+            out[result].valid = true;
+            result++;
+        }
+
+        return result;
+    }
+uint64_t EntitySystem::find_local_rigid_body(const Vector3& local_pos)
+    {
+        constexpr int MAX_BODIES = 512;
+        static RigidBodyInfo bodies[MAX_BODIES];
+        memset(bodies, 0, sizeof(bodies));
+
+        m_hkp_world_valid = false;
+
+        int total = enumerate_rigid_bodies(bodies, MAX_BODIES);
+        if (total == 0) return 0;
+
+        uint64_t best_addr = 0;
+        float best_dist2 = 25.0f;
+        float nearest_dist2 = FLT_MAX;
+
+        for (int i = 0; i < total; i++)
+        {
+            auto& b = bodies[i];
+            if (!b.valid) continue;
+            float dx = b.pos_x - local_pos.x;
+            float dy = b.pos_y - local_pos.y;
+            float dz = b.pos_z - local_pos.z;
+            float d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < nearest_dist2) nearest_dist2 = d2;
+            if (d2 < best_dist2)
+            {
+                best_dist2 = d2;
+                best_addr = b.address;
+            }
+        }
+
+        if (best_addr == 0)
+        {
+            static std::chrono::steady_clock::time_point t_last_log{};
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<float>(now - t_last_log).count() >= 1.0f)
+            {
+                t_last_log = now;
+                Log::Warningf("Fly: no body found (nearest %.0fm)", sqrtf(nearest_dist2));
+            }
+        }
+        return best_addr;
+    }
+namespace d2::features
+{
+
+    struct FlyMode
+    {
+        std::atomic<bool> flag_fly{false};
+        bool fly_directional = false;
+        float fly_speed = 15.0f;
+
+        std::atomic<float> fly_input_forward{0};
+        std::atomic<float> fly_input_right{0};
+        std::atomic<float> fly_input_up{0};
+        std::atomic<bool> fly_input_fast{false};
+
+        float fly_pos_x = 0, fly_pos_y = 0, fly_pos_z = 0;
+        std::atomic<bool> fly_initialized{false};
+        uint64_t fly_saved_entity_data = 0;
+        uint64_t fly_saved_world_ptr = 0;
+        std::chrono::steady_clock::time_point last_body_scan{};
+        std::chrono::steady_clock::time_point last_validate{};
+
+        void tick(uint64_t& cached_fly_body, d2::game::EntitySystem* entity, const float* cam_view_matrix, bool cam_valid, const float* cached_local_pos, std::chrono::high_resolution_clock::time_point& last_frame_time);
+
+        void reset()
+        {
+            fly_initialized = false;
+            fly_pos_x = fly_pos_y = fly_pos_z = 0;
+            fly_saved_entity_data = 0;
+            fly_saved_world_ptr = 0;
+            last_body_scan = {};
+            last_validate = {};
+        }
+    };
+
+}
+extern Memory mem;
+
+static VMMDLL_SCATTER_HANDLE s_fly_validate_h = nullptr;
+static VMMDLL_SCATTER_HANDLE s_fly_write_h = nullptr;
+
+static bool read_body_identity(uint64_t body, uint64_t& ent_data, uint64_t& world_ptr)
+{
+    auto h = acquire_scatter(s_fly_validate_h);
+    if (!h) return false;
+    mem.AddScatterReadRequest(h, body + d2::offsets::opk::BODY_ENTITY_DATA, &ent_data, 8);
+    mem.AddScatterReadRequest(h, body + d2::offsets::opk::BODY_WORLD_PTR, &world_ptr, 8);
+    mem.ExecuteReadScatter(h);
+    return true;
+}
+
+namespace d2::features
+{
+    void FlyMode::tick(uint64_t& cached_fly_body, d2::game::EntitySystem* entity, const float* cam_view_matrix, bool cam_valid, const float* cached_local_pos, std::chrono::high_resolution_clock::time_point& last_frame_time)
+    {
+        using namespace d2::offsets::opk;
+
+        bool do_fly = flag_fly.load(std::memory_order_relaxed);
+
+        if (!do_fly)
+        {
+            if (fly_initialized)
+            {
+                fly_initialized = false;
+                cached_fly_body = 0;
+            }
+            return;
+        }
+
+        if (!cam_valid || cached_local_pos[0] == 0.0f) return;
+
+        if (cached_fly_body == 0)
+        {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<float>(now - last_body_scan).count() > 0.05f)
+            {
+                last_body_scan = now;
+                d2::game::Vector3 lp = {cached_local_pos[0], cached_local_pos[1], cached_local_pos[2]};
+                cached_fly_body = entity->find_local_rigid_body(lp);
+            }
+            if (cached_fly_body != 0 && !fly_initialized)
+            {
+                uint64_t ent_data = 0, world_ptr = 0;
+                if (!read_body_identity(cached_fly_body, ent_data, world_ptr)) return;
+
+                if (!is_user_heap_ptr(ent_data) || !is_user_heap_ptr(world_ptr))
+                {
+                    cached_fly_body = 0;
+                    return;
+                }
+
+                fly_saved_entity_data = ent_data;
+                fly_saved_world_ptr = world_ptr;
+                fly_initialized = true;
+                fly_pos_x = cached_local_pos[0];
+                fly_pos_y = cached_local_pos[1];
+                fly_pos_z = cached_local_pos[2];
+            }
+        }
+
+        if (cached_fly_body == 0 || !is_user_heap_ptr(cached_fly_body)) return;
+
+        auto now_v = std::chrono::steady_clock::now();
+        if (std::chrono::duration<float>(now_v - last_validate).count() > 0.025f)
+        {
+            last_validate = now_v;
+            uint64_t cur_ent_data = 0, cur_world_ptr = 0;
+            read_body_identity(cached_fly_body, cur_ent_data, cur_world_ptr);
+            if (cur_ent_data != fly_saved_entity_data || cur_world_ptr != fly_saved_world_ptr)
+            {
+                fly_initialized = false;
+                cached_fly_body = 0;
+                return;
+            }
+        }
+
+        if (!d2::game::is_finite_vec3(fly_pos_x, fly_pos_y, fly_pos_z) || !std::isfinite(cam_view_matrix[0])) return;
+
+        float fwd = fly_input_forward.load(std::memory_order_relaxed);
+        float rgt = fly_input_right.load(std::memory_order_relaxed);
+        float up = fly_input_up.load(std::memory_order_relaxed);
+        bool fast = fly_input_fast.load(std::memory_order_relaxed);
+
+        float speed = fly_speed * (fast ? 3.0f : 1.0f);
+
+        auto fly_now = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration<float>(fly_now - last_frame_time).count();
+        if (dt < 0.0f) dt = 0.0f;
+        if (dt > 0.1f) dt = 0.1f;
+        float move_dist = speed * dt;
+
+        if (fwd != 0 || rgt != 0 || up != 0)
+        {
+            const float* vm = cam_view_matrix;
+            if (fly_directional)
+            {
+                float rx = vm[0], ry = vm[4], rz = vm[8];
+                float ux = vm[1], uy = vm[5], uz = vm[9];
+                float fx = vm[2], fy = vm[6], fz = vm[10];
+                fly_pos_x += (fx * fwd + rx * rgt + ux * up) * move_dist;
+                fly_pos_y += (fy * fwd + ry * rgt + uy * up) * move_dist;
+                fly_pos_z += (fz * fwd + rz * rgt + uz * up) * move_dist;
+            }
+            else
+            {
+                float fx = vm[2], fy = vm[6];
+                float flen = sqrtf(fx * fx + fy * fy);
+                if (flen > 0.001f)
+                {
+                    fx /= flen;
+                    fy /= flen;
+                }
+                float rx = vm[0], ry = vm[4];
+                float rlen = sqrtf(rx * rx + ry * ry);
+                if (rlen > 0.001f)
+                {
+                    rx /= rlen;
+                    ry /= rlen;
+                }
+                fly_pos_x += (fx * fwd + rx * rgt) * move_dist;
+                fly_pos_y += (fy * fwd + ry * rgt) * move_dist;
+                fly_pos_z += up * move_dist;
+            }
+        }
+
+        float pos[3] = {fly_pos_x, fly_pos_y, fly_pos_z};
+        float zero16[4] = {0, 0, 0, 0};
+
+        auto hf = acquire_scatter(s_fly_write_h);
+        if (hf)
+        {
+            mem.AddScatterWriteRequest(hf, cached_fly_body + BODY_POS_X, pos, 12);
+            mem.AddScatterWriteRequest(hf, cached_fly_body + BODY_LINEAR_VEL, zero16, 16);
+            mem.AddScatterWriteRequest(hf, cached_fly_body + BODY_ANGULAR_VEL, zero16, 16);
+            mem.ExecuteWriteScatter(hf);
+        }
+    }
+
+}

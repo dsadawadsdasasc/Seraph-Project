@@ -1,0 +1,34 @@
+[OPTIONS]
+; Themida profile for Seraph DMA build.
+; Same security settings as themida_stub.tmd but targeting LOADER<N>.exe.
+;
+; Usage:
+;   set THEMIDA_PROFILE=tools\themida_dma.tmd
+;   b_dma.bat
+;
+; Themida will read InputFile, protect it, and write OutputFile.
+; Update InputFile / OutputFile to match the current build version number,
+; OR configure your CI to patch these lines before invoking b_dma.bat.
+
+ApplicationType=Win64EXE
+InputFile=LOADER1.exe
+OutputFile=LOADER1.exe
+
+[PROTECTION]
+AntiDebugger=Advanced
+AntiVM=true
+EncryptionAlgorithm=SHARK
+AntiPatching=true
+MemoryGuard=true
+ResourcesEncryption=true
+AntiMemoryDumpers=true
+Compression=true
+
+[VM]
+; SHARK VM — matches the Loader/Stub profile.
+; Applied to regions wrapped with VM_START/VM_END in dma_entry.cpp.
+VMEngine=SHARK
+
+[MUTATION]
+; Applied to regions wrapped with MUTATE_START/MUTATE_END.
+MutationEngine=Default
